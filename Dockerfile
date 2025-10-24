@@ -31,10 +31,25 @@ ARG BUILD_HASH
 
 WORKDIR /app
 
+# Merge corporate CA into Alpine bundle BEFORE apk
+RUN --mount=type=secret,id=corp-ca \
+    cat /etc/ssl/cert.pem /run/secrets/corp-ca > /tmp/ca.pem && \
+    mv /tmp/ca.pem /etc/ssl/cert.pem
+
 # to store git revision in build
 RUN apk add --no-cache git
 
 COPY package.json package-lock.json ./
+
+# Make Node trust the merged Alpine bundle
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/cert.pem
+# Make npm use the same bundle and keep strict TLS
+RUN npm config set cafile /etc/ssl/cert.pem && npm config set strict-ssl true
+
+# Sanity check for TLS
+RUN node -e "console.log('roots=',require('tls').rootCertificates.length)" \
+ && node -e "require('https').get('https://registry.npmjs.org/@tiptap/core',r=>{console.log(r.statusCode); process.exit(r.statusCode===200?0:1)}).on('error',e=>{console.error(e);process.exit(1)})"
+
 RUN npm ci --force
 
 COPY . .
@@ -43,6 +58,18 @@ RUN npm run build
 
 ######## WebUI backend ########
 FROM python:3.11-slim-bookworm AS base
+
+# Trust system CAs
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && update-ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# Inject corporate CA for pip (uses BuildKit secret)
+RUN --mount=type=secret,id=corp-ca \
+    cp /run/secrets/corp-ca /usr/local/share/ca-certificates/corp-ca.crt && update-ca-certificates
+
+# Make Python/pip honor the bundle
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
+    REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
+    PIP_CERT=/etc/ssl/certs/ca-certificates.crt
 
 # Use args
 ARG USE_CUDA
