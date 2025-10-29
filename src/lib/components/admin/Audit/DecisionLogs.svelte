@@ -112,8 +112,7 @@
   {#each logs as ev}
     <div class="border rounded-md p-3 bg-gray-50 dark:bg-gray-900">
       <div class="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-        <div><span class="opacity-60">Decision ID:</span> {fmt(ev.decision_id || ev.id || '—')}</div>
-        <div><span class="opacity-60">Path:</span> {fmt(ev.path || '—')}</div>
+        <!-- Result shown first with coloured pill -->
         <div class="flex items-center gap-2">
           <span class="opacity-60">Result:</span>
           {#if ev.result}
@@ -124,15 +123,15 @@
             <span>—</span>
           {/if}
         </div>
+        <div><span class="opacity-60">User Email:</span> {fmt(ev.user_email ?? '—')}</div>
+        <div><span class="opacity-60">Phase:</span> {fmt(ev.phase ?? '—')}</div>
         <div><span class="opacity-60">Timestamp:</span> {fmt(ev.timestamp || ev.time || '—')}</div>
-        {#if ev.input?.phase}
-          <div><span class="opacity-60">Phase:</span> {ev.input.phase}</div>
-        {/if}
+        <div><span class="opacity-60">Decision ID:</span> {fmt(ev.decision_id ?? '—')}</div>
       </div>
 
       <details class="mt-2">
         <summary class="text-sm cursor-pointer">Raw event</summary>
-        <pre class="mt-2 text-xs overflow-auto">{JSON.stringify(ev, null, 2)}</pre>
+        <pre class="mt-2 text-xs overflow-auto">{JSON.stringify(ev.raw ?? ev, null, 2)}</pre>
       </details>
     </div>
   {/each}
