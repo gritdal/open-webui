@@ -67,9 +67,17 @@ RUN --mount=type=secret,id=corp-ca \
     cp /run/secrets/corp-ca /usr/local/share/ca-certificates/corp-ca.crt && update-ca-certificates
 
 # Make Python/pip honor the bundle
-ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
-    REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
-    PIP_CERT=/etc/ssl/certs/ca-certificates.crt
+# ENV SSL_CERT_FILE=/etc/ssl/certs/certificate.crt \
+#     SSL_KEY_FILE=/etc/ssl/certs/private.key \
+#     REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+#     # PIP_CERT=/etc/ssl/certs/ca-certificates.crt
+
+# Client trust
+ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
+    SSL_CERT_DIR=/etc/ssl/certs
+# Server TLS files
+ENV SERVER_CERT_FILE=/etc/ssl/certs/corp-certificate.crt \
+    SERVER_KEY_FILE=/etc/ssl/certs/corp-private.key
 
 # Use args
 ARG USE_CUDA

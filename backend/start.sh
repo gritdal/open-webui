@@ -79,9 +79,14 @@ else
     ARGS=(--workers "$UVICORN_WORKERS")
 fi
 
+SERVER_CERT_FILE="${SERVER_CERT_FILE:-/etc/ssl/certs/corp-certificate.crt}"
+SERVER_KEY_FILE="${SERVER_KEY_FILE:-/etc/ssl/certs/corp-private.key}"
+
 # Run uvicorn
 WEBUI_SECRET_KEY="$WEBUI_SECRET_KEY" exec "$PYTHON_CMD" -m uvicorn open_webui.main:app \
     --host "$HOST" \
     --port "$PORT" \
     --forwarded-allow-ips '*' \
+    --ssl-certfile "$SERVER_CERT_FILE" \
+    --ssl-keyfile "$SERVER_KEY_FILE" \
     "${ARGS[@]}"
