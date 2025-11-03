@@ -1,11 +1,25 @@
 import os
+import re
 import httpx
+import redis
 from fastapi import APIRouter, HTTPException
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 router = APIRouter()
 
 ENFORCER = os.getenv("POLICY_ENFORCER_URL", "http://policy_enforcer:8181").rstrip("/")
+
+# Base URL for the MAD parser service.  The policies tab in the web UI
+# relies on the rego policies stored by the MAD parser sidecar.  Each
+# department policy can be retrieved via GET /rego_policy/<department>.
+MAD_PARSER = os.getenv("MAD_PARSER_URL", "http://mad_parser:7777").rstrip("/")
+
+# Redis connection URL.  The MAD parser and policy enforcer share a
+# common Valkey instance for storing group and policy mappings.  We
+# inspect the rego_policy:* keys to enumerate available department
+# policies for the new policies tab.  Use decode_responses so values
+# are returned as Python strings.
+REDIS_URL = os.getenv("REDIS_URL", "redis://valkey:6379/0")
 
 @router.get("/decision-logs")
 async def decision_logs():
@@ -64,3 +78,85 @@ async def decision_logs():
             "raw": ev,
         })
     return mapped
+
+
+@router.get("/policies")
+async def list_policies() -> List[Dict[str, Any]]:
+    """
+    Return a list of department rego policies for display in the audit UI.
+
+    The MAD parser stores per‑department policies in Valkey under keys
+    formatted as ``rego_policy:<department>``.  Group‑level assignments
+    also use the same prefix but include GUIDs in place of a
+    department name.  To build the policies tab we enumerate all
+    ``rego_policy:*`` keys, filter out values that appear to be
+    department names (e.g. all lowercase letters and underscores), and
+    then fetch each policy's contents via the MAD parser REST API.
+
+    Each returned object has the following fields:
+
+    * ``name`` – the department name (e.g. ``"business"``)
+    * ``policy`` – the full Rego policy text for that department
+
+    If a policy cannot be retrieved or parsed, it is skipped.  An
+    empty list is returned when no department policies are found.
+    """
+    # Connect to Valkey/Redis to list policy keys.  We do this
+    # synchronously since the redis client is not async.  Use a small
+    # scan count to avoid blocking the event loop for too long.
+    try:
+        r = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to connect to Redis: {exc}")
+    try:
+        keys = list(r.scan_iter(match="rego_policy:*", count=1000))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to scan policy keys: {exc}")
+    # Extract candidate department names from keys.  A department
+    # name is assumed to consist of lowercase letters and underscores
+    # only.  This heuristic avoids selecting group IDs (GUIDs) which
+    # contain digits and hyphens.
+    depts = []
+    for key in keys:
+        # Key format: rego_policy:<name>
+        parts = key.split(":", 1)
+        if len(parts) != 2:
+            continue
+        name = parts[1]
+        if re.fullmatch(r"[a-z_]+", name):
+            depts.append(name)
+    # Deduplicate and sort for stable output
+    depts = sorted(set(depts))
+    if not depts:
+        return []
+    # Fetch each policy via the MAD parser API.  This ensures that
+    # Redis overrides and default policies are respected.  Use an
+    # asynchronous HTTP client to avoid blocking the loop.
+    policies: List[Dict[str, Any]] = []
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        for name in depts:
+            url = f"{MAD_PARSER}/rego_policy/{name}"
+            try:
+                resp = await client.get(url, headers={"accept": "application/json"})
+            except Exception as exc:
+                # Skip this policy on error
+                continue
+            if resp.status_code != 200:
+                # Skip if not found or other error
+                continue
+            policy_text: Optional[str] = None
+            try:
+                data = resp.json()
+                # Response should be a dict with a "policy" field
+                if isinstance(data, dict):
+                    policy_text = data.get("policy")
+                # Fall back to raw JSON if not present
+                if not policy_text and data:
+                    # some endpoints may return plain string; guard
+                    policy_text = data if isinstance(data, str) else None
+            except Exception:
+                # If JSON parsing fails, assume body is plain text
+                policy_text = resp.text
+            if policy_text and isinstance(policy_text, str):
+                policies.append({"name": name, "policy": policy_text})
+    return policies
