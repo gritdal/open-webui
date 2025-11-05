@@ -20,6 +20,18 @@
     return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300';
   };
 
+  // Same as resultClass, but also handles a "warn" state in yellow.
+  const recommendedActionClass = (a: any) => {
+    const v = (typeof a === 'string' ? a : String(a || '')).toLowerCase();
+    if (v === 'allow')
+      return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300';
+    if (v === 'block')
+      return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
+    if (v === 'warn')
+      return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300';
+    return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300';
+  };
+
   async function fetchLogs() {
     loading = true;
     error = '';
@@ -123,11 +135,26 @@
             <span>—</span>
           {/if}
         </div>
+        <!-- Recommended action shown after result -->
+        <div class="flex items-center gap-2">
+          <span class="opacity-60">Recommended Action:</span>
+          {#if ev.recommended_action}
+            <span class={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${recommendedActionClass(ev.recommended_action)}`}>
+              {ev.recommended_action}
+            </span>
+          {:else}
+            <span>—</span>
+          {/if}
+        </div>
         <div><span class="opacity-60">User Email:</span> {fmt(ev.user_email ?? '—')}</div>
         <div><span class="opacity-60">Phase:</span> {fmt(ev.phase ?? '—')}</div>
         <div><span class="opacity-60">Timestamp:</span> {fmt(ev.timestamp || ev.time || '—')}</div>
         <div><span class="opacity-60">Decision ID:</span> {fmt(ev.decision_id ?? '—')}</div>
       </div>
+
+      {#if ev.summary}
+        <div class="mt-2 text-sm">{ev.summary}</div>
+      {/if}
 
       <details class="mt-2">
         <summary class="text-sm cursor-pointer">Raw event</summary>
