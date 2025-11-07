@@ -3,8 +3,15 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
 
-  import DecisionLogs from '$lib/components/admin/Audit/DecisionLogs.svelte';
-  import Policies from '$lib/components/admin/Audit/Policies.svelte';
+import DecisionLogs from '$lib/components/admin/Audit/DecisionLogs.svelte';
+import Policies from '$lib/components/admin/Audit/Policies.svelte';
+// New tab component to embed the Grafana dashboard.  See new file
+// Grafana.svelte for implementation details.
+// Import the Grafana embed component.  The file lives in the same
+// directory as this component, so use a relative import.  When
+// integrated into the full Open WebUI repository, this file will be
+// placed in the appropriate ``src/lib/components/admin/Audit`` path.
+import Grafana from '$lib/components/admin/Audit//Grafana.svelte';
 
   const i18n = getContext('i18n');
 
@@ -60,6 +67,27 @@
       </div>
       <div class="self-center">{$i18n.t('Policies')}</div>
     </button>
+
+    <!-- Grafana dashboard tab button.  This tab embeds the Policy Enforcer
+         dashboard running on the local Grafana instance.  The route
+         matches /admin/audit/grafana and is selected based on the
+         $page.params.tab reactive variable. -->
+    <button
+      id="grafana"
+      class="px-0.5 py-1 min-w-fit rounded-lg lg:flex-none flex text-right transition
+             {selectedTab === 'grafana'
+               ? ''
+               : ' text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'}"
+      on:click={() => goto('/admin/audit/grafana')}
+    >
+      <div class="self-center mr-2">
+        <!-- chart icon for Grafana tab (simple bar chart) -->
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-4">
+          <path d="M2 13h1V6H2v7zm3 0h1V3H5v10zm3 0h1V8H8v5zm3 0h1V1h-1v12z" />
+        </svg>
+      </div>
+      <div class="self-center">{$i18n.t('Grafana')}</div>
+    </button>
   </div>
 
   <!-- RIGHT CONTENT -->
@@ -69,6 +97,9 @@
     {/if}
     {#if selectedTab === 'policies'}
       <Policies />
+    {/if}
+    {#if selectedTab === 'grafana'}
+      <Grafana />
     {/if}
   </div>
 </div>
