@@ -11,13 +11,13 @@
    */
   import { onMount } from 'svelte';
 
-  // Default URL for the Policy Enforcer Decision Logs dashboard.  The
-  // Grafana service in docker-compose exposes port 8081 on the host
-  // and allows anonymous access.  Replace this with ``http://localhost:8081/dashboards``
-  // if you prefer to show the Grafana home page instead of a specific
-  // dashboard.
+  // Default URL for the Policy Enforcer Decision Logs dashboard.  When
+  // served through the reverse proxy, Grafana is available under the
+  // ``/grafana`` subpath on the same host and port as the Open WebUI
+  // application.  Using a relative URL here ensures the dashboard
+  // works across environments without hard‑coding ``localhost``.
   const dashboardUrl: string =
-    'http://localhost:8081/d/policy-enforcer-dashboard/policy-enforcer-decision-logs?orgId=1&refresh=5s';
+    '/grafana/d/policy-enforcer-dashboard/policy-enforcer-decision-logs?orgId=1&refresh=5s';
 
   // Track whether the iframe has been loaded.  We could use this to
   // display a loading indicator if desired.
@@ -37,10 +37,12 @@
 <div class="w-full h-full flex flex-col space-y-2">
   <div class="flex items-center justify-between">
     <div class="font-medium">Grafana Dashboard</div>
-    <!-- Open in a new tab to view the full Grafana UI.  Use
-         target="_blank" and rel="noopener noreferrer" for security. -->
+    <!-- Open in a new tab to view the full Grafana UI.  Use a relative
+         path so that the link resolves correctly when served behind
+         the reverse proxy.  The ``/grafana/dashboards`` route renders
+         the default Grafana landing page. -->
     <a
-      href="http://localhost:8081/dashboards"
+      href="/grafana/dashboards"
       target="_blank"
       rel="noopener noreferrer"
       class="text-sm underline hover:no-underline"
