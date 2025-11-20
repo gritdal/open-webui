@@ -13,6 +13,13 @@ import Policies from '$lib/components/admin/Audit/Policies.svelte';
 // placed in the appropriate ``src/lib/components/admin/Audit`` path.
 import Grafana from '$lib/components/admin/Audit//Grafana.svelte';
 
+// Action Settings tab component.  This new tab allows
+// administrators to configure how the orchestrator handles policy
+// decisions via the /api/v1/audit/config proxy.  The file lives in
+// the same directory as this component when integrated into the
+// full repository.
+import ActionSettings from '$lib/components/admin/Audit/ActionSettings.svelte';
+
   const i18n = getContext('i18n');
 
   let selectedTab = 'decision-logs';
@@ -88,6 +95,26 @@ import Grafana from '$lib/components/admin/Audit//Grafana.svelte';
       </div>
       <div class="self-center">{$i18n.t('Grafana')}</div>
     </button>
+
+    <!-- Action Settings tab button.  This tab exposes configuration
+         options for how the orchestrator interprets policy decisions.
+         Selecting this tab navigates to /admin/audit/action-settings. -->
+    <button
+      id="action-settings"
+      class="px-0.5 py-1 min-w-fit rounded-lg lg:flex-none flex text-right transition
+             {selectedTab === 'action-settings'
+               ? ''
+               : ' text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'}"
+      on:click={() => goto('/admin/audit/action-settings')}
+    >
+      <div class="self-center mr-2">
+        <!-- settings icon for Action Settings tab (simple gear) -->
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-4">
+          <path fill-rule="evenodd" d="M8 1a1 1 0 01.993.883L9 2v1.07a5.999 5.999 0 012.26.902l.759-.759a1 1 0 011.497 1.32l-.077.084-.76.76a6.001 6.001 0 01.9 2.257H14a1 1 0 01.117 1.993L14 10h-1.07a6 6 0 01-.901 2.259l.76.76a1 1 0 01-1.32 1.497l-.084-.077-.759-.76A5.999 5.999 0 019 12.93V14a1 1 0 01-1.993.117L7 14v-1.07a5.999 5.999 0 01-2.26-.902l-.759.76a1 1 0 01-1.497-1.32l.077-.084.76-.76A6.001 6.001 0 012.9 10H2a1 1 0 01-.117-1.993L2 8h1.07a6 6 0 01.901-2.259l-.76-.76a1 1 0 011.32-1.497l.084.077.759.76A5.999 5.999 0 017 3.07V2a1 1 0 011-1zm0 4a3 3 0 100 6 3 3 0 000-6z" clip-rule="evenodd" />
+        </svg>
+      </div>
+      <div class="self-center">{$i18n.t('Action Settings')}</div>
+    </button>
   </div>
 
   <!-- RIGHT CONTENT -->
@@ -100,6 +127,10 @@ import Grafana from '$lib/components/admin/Audit//Grafana.svelte';
     {/if}
     {#if selectedTab === 'grafana'}
       <Grafana />
+    {/if}
+
+    {#if selectedTab === 'action-settings'}
+      <ActionSettings />
     {/if}
   </div>
 </div>

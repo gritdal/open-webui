@@ -14,6 +14,12 @@ ENFORCER = os.getenv("POLICY_ENFORCER_URL", "http://policy_enforcer:8181").rstri
 # department policy can be retrieved via GET /rego_policy/<department>.
 MAD_PARSER = os.getenv("MAD_PARSER_URL", "http://mad_parser:7777").rstrip("/")
 
+# Base URL for the PromptSage orchestrator API.  The new Action Settings
+# tab in the admin UI communicates with the orchestrator via these
+# configuration endpoints.  If ORCHESTRATOR_URL is not set, we
+# default to the orchestrator service name within the Docker network.
+ORCHESTRATOR = os.getenv("ORCHESTRATOR_URL", "http://orchestrator:8000/promptsage/orchestrator/v1").rstrip("/")
+
 # Redis connection URL.  The MAD parser and policy enforcer share a
 # common Valkey instance for storing group and policy mappings.  We
 # inspect the rego_policy:* keys to enumerate available department
@@ -206,3 +212,57 @@ async def list_policies() -> List[Dict[str, Any]]:
             if policy_text and isinstance(policy_text, str):
                 policies.append({"name": name, "policy": policy_text})
     return policies
+
+
+# ------------------------------------------------------------
+# Configuration proxies
+#
+# The orchestrator exposes GET/POST endpoints at
+# /promptsage/orchestrator/v1/config for reading and updating
+# decision handling configuration.  To avoid cross‑origin requests
+# from the browser and to keep secrets (like service hostnames) on
+# the backend, we proxy those endpoints through the audit router.
+
+@router.get("/config")
+async def get_orchestrator_config() -> Dict[str, Any]:
+    """Return the current orchestrator configuration.
+
+    This endpoint forwards a GET request to the orchestrator's
+    configuration API and returns the JSON response.  On error the
+    HTTP status and message are propagated to the client.
+    """
+    url = f"{ORCHESTRATOR}/config"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(url, headers={"accept": "application/json"})
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to reach orchestrator: {exc}")
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text)
+    try:
+        return r.json()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to parse JSON from orchestrator: {exc}")
+
+
+@router.post("/config")
+async def update_orchestrator_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Update the orchestrator configuration.
+
+    Accepts a JSON body containing optional keys ``decision_block_level``
+    and/or ``allow_fallback_block``.  Forwards the payload to the
+    orchestrator's configuration API via POST and returns the updated
+    configuration.  Errors from the orchestrator are passed through.
+    """
+    url = f"{ORCHESTRATOR}/config"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.post(url, json=cfg, headers={"accept": "application/json"})
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to reach orchestrator: {exc}")
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text)
+    try:
+        return r.json()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to parse JSON from orchestrator: {exc}")
