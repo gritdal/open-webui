@@ -14,18 +14,22 @@ ENFORCER = os.getenv("POLICY_ENFORCER_URL", "http://policy_enforcer:8181").rstri
 # department policy can be retrieved via GET /rego_policy/<department>.
 MAD_PARSER = os.getenv("MAD_PARSER_URL", "http://mad_parser:7777").rstrip("/")
 
-# Base URL for the PromptSage orchestrator API.  The new Action Settings
-# tab in the admin UI communicates with the orchestrator via these
-# configuration endpoints.  If ORCHESTRATOR_URL is not set, we
-# default to the orchestrator service name within the Docker network.
-ORCHESTRATOR = os.getenv("ORCHESTRATOR_URL", "http://orchestrator:8000/promptsage/orchestrator/v1").rstrip("/")
-
 # Redis connection URL.  The MAD parser and policy enforcer share a
 # common Valkey instance for storing group and policy mappings.  We
 # inspect the rego_policy:* keys to enumerate available department
 # policies for the new policies tab.  Use decode_responses so values
 # are returned as Python strings.
 REDIS_URL = os.getenv("REDIS_URL", "redis://valkey:6379/0")
+
+# Base URL for the orchestrator service.  The action settings tab in
+# the Web UI proxies configuration to the orchestrator via these
+# endpoints.  The URL should point to the root of the orchestrator
+# API where the ``/config`` endpoints live.  Defaults to the
+# orchestrator service deployed in Docker.
+ORCHESTRATOR = os.getenv(
+    "ORCHESTRATOR_URL",
+    "http://orchestrator:8000/promptsage/orchestrator/v1",
+).rstrip("/")
 
 @router.get("/decision-logs")
 async def decision_logs():
@@ -35,9 +39,12 @@ async def decision_logs():
     ``policy_enforcer`` service and adapts them for display in the
     Open WebUI.  Each log entry returned contains the following keys:
 
-    * ``result`` – ``"allow"`` or ``"block"``, derived from the structured
-      decision's ``allow`` flag or the OPA ``result`` field when a
-      boolean is returned
+    * ``result`` – ``"allow"``, ``"warn"`` or ``"block"``.  The value
+      reflects the action taken by the orchestrator after applying the
+      current action settings.  A ``warn`` indicates the request was
+      allowed but a warning action was present in the policy decision.
+      A ``block`` indicates the request was blocked.  ``allow`` means
+      the request was allowed and no warning applies.
     * ``recommended_action`` – suggested remediation action from the
       decision, if provided by the policy (otherwise ``None``)
     * ``user_email`` – email address provided in the input (if any)
@@ -63,6 +70,28 @@ async def decision_logs():
     items = data if isinstance(data, list) else [data]
     # Drop null/empty events
     events = [x for x in items if isinstance(x, dict) and x]
+    # Fetch the current orchestrator configuration to compute the final
+    # allow/block result.  If the orchestrator cannot be reached or
+    # parsing fails, fall back to default values (block on "block"
+    # actions and honour the boolean allow flag).
+    decision_block_level = "block"
+    allow_fallback_block = True
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            cfg_resp = await client.get(
+                f"{ORCHESTRATOR}/config", headers={"accept": "application/json"}
+            )
+        if cfg_resp.status_code == 200:
+            cfg = cfg_resp.json()
+            if isinstance(cfg.get("decision_block_level"), str):
+                level = cfg["decision_block_level"].lower()
+                if level in {"none", "warn", "block"}:
+                    decision_block_level = level
+            if isinstance(cfg.get("allow_fallback_block"), bool):
+                allow_fallback_block = cfg["allow_fallback_block"]
+    except Exception:
+        # ignore errors and use defaults
+        pass
     mapped: List[Dict[str, Any]] = []
     for ev in events:
         # Determine the decision details.  The policy enforcer stores
@@ -75,24 +104,62 @@ async def decision_logs():
             decision_obj = ev.get("decision")
         elif isinstance(raw_result, dict):
             decision_obj = raw_result
-        # Determine the allow flag
-        allow_flag: Optional[bool] = None
+        # Determine the boolean allow flag (legacy allow).  This will
+        # be used when no structured action is present.
+        allow_bool: Optional[bool] = None
         if decision_obj is not None:
             if "allow" in decision_obj:
-                allow_flag = bool(decision_obj.get("allow"))
+                allow_bool = bool(decision_obj.get("allow"))
             else:
                 # Fallback: treat truthiness of decision object as allow
-                allow_flag = bool(decision_obj)
+                allow_bool = bool(decision_obj)
         elif isinstance(raw_result, bool):
-            allow_flag = raw_result
+            allow_bool = raw_result
         elif isinstance(raw_result, str):
-            allow_flag = raw_result.lower() == "true"
+            allow_bool = raw_result.lower() == "true"
         elif isinstance(ev.get("allow"), bool):
-            allow_flag = ev.get("allow")
+            allow_bool = ev.get("allow")
         else:
             # Default to False when unable to determine
-            allow_flag = False
-        result_str = "allow" if allow_flag else "block"
+            allow_bool = False
+        # Determine decision action (if present)
+        decision_action: Optional[str] = None
+        if isinstance(decision_obj, dict):
+            act = decision_obj.get("action")
+            if isinstance(act, str):
+                decision_action = act
+        # Compute final allow based on orchestrator configuration
+        if decision_action is not None:
+            act_l = decision_action.lower()
+            if decision_block_level == "none":
+                final_allow = True
+            elif decision_block_level == "warn":
+                final_allow = act_l not in {"warn", "block"}
+            else:  # "block"
+                final_allow = act_l != "block"
+        else:
+            if allow_fallback_block:
+                final_allow = bool(allow_bool)
+            else:
+                final_allow = True
+        # Determine the result string based on the final outcome and
+        # decision action.  When the action settings are disabled
+        # (decision_block_level == "none"), always report "allow".
+        # Otherwise, report "warn" when the request is allowed and the
+        # original decision action was "warn".  Report "block" when
+        # the request is blocked.  In all other allowed cases, report
+        # "allow".
+        if decision_block_level == "none":
+            # Disabled behaviour: ignore decision_action entirely
+            result_str = "allow"
+        else:
+            if not final_allow:
+                result_str = "block"
+            else:
+                if decision_action is not None and decision_action.lower() == "warn":
+                    result_str = "warn"
+                else:
+                    result_str = "allow"
         # Extract recommended action from the decision if present
         recommended_action: Optional[Any] = None
         if isinstance(decision_obj, dict):
@@ -108,7 +175,7 @@ async def decision_logs():
         evaluated_policy = input_obj.get("evaluated_policy")
         # Compute a human-readable summary when blocked and sufficient info is available
         summary: Optional[str] = None
-        if not allow_flag and phase and evaluated_policy and reasons:
+        if not final_allow and phase and evaluated_policy and reasons:
             # Convert reasons to a comma-separated string
             if isinstance(reasons, list):
                 reasons_str = ", ".join(str(x) for x in reasons)
@@ -214,55 +281,72 @@ async def list_policies() -> List[Dict[str, Any]]:
     return policies
 
 
-# ------------------------------------------------------------
-# Configuration proxies
+# ---------------------------------------------------------------------------
+# Orchestrator configuration proxy endpoints
 #
-# The orchestrator exposes GET/POST endpoints at
-# /promptsage/orchestrator/v1/config for reading and updating
-# decision handling configuration.  To avoid cross‑origin requests
-# from the browser and to keep secrets (like service hostnames) on
-# the backend, we proxy those endpoints through the audit router.
+# The action settings tab in the admin interface uses these routes to
+# configure the orchestrator.  They simply forward GET and POST
+# requests to the orchestrator's ``/config`` endpoint.  Any errors
+# encountered when reaching the orchestrator are returned as HTTP
+# errors to the caller.
+
 
 @router.get("/config")
-async def get_orchestrator_config() -> Dict[str, Any]:
-    """Return the current orchestrator configuration.
+async def get_orchestrator_config() -> Any:
+    """Proxy the GET /config request to the orchestrator.
 
-    This endpoint forwards a GET request to the orchestrator's
-    configuration API and returns the JSON response.  On error the
-    HTTP status and message are propagated to the client.
+    Returns the current configuration used by the orchestrator for
+    decision blocking behaviour.  The response is returned as-is
+    from the orchestrator.  Raises HTTPError when the orchestrator
+    cannot be reached or does not return a 200 OK.
     """
     url = f"{ORCHESTRATOR}/config"
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get(url, headers={"accept": "application/json"})
+            resp = await client.get(url, headers={"accept": "application/json"})
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Failed to reach orchestrator: {exc}")
-    if r.status_code != 200:
-        raise HTTPException(status_code=r.status_code, detail=r.text)
+    if resp.status_code != 200:
+        raise HTTPException(status_code=resp.status_code, detail=resp.text)
     try:
-        return r.json()
+        return resp.json()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to parse JSON from orchestrator: {exc}")
 
 
 @router.post("/config")
-async def update_orchestrator_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    """Update the orchestrator configuration.
+async def set_orchestrator_config(body: Dict[str, Any]) -> Any:
+    """Proxy the POST /config request to the orchestrator.
 
-    Accepts a JSON body containing optional keys ``decision_block_level``
-    and/or ``allow_fallback_block``.  Forwards the payload to the
-    orchestrator's configuration API via POST and returns the updated
-    configuration.  Errors from the orchestrator are passed through.
+    The body should contain configuration fields accepted by the
+    orchestrator (e.g. ``decision_block_level`` and
+    ``allow_fallback_block``).  The response from the orchestrator is
+    returned as-is on success.  A non-200 status from the orchestrator
+    triggers an HTTPError to be raised.
     """
     url = f"{ORCHESTRATOR}/config"
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.post(url, json=cfg, headers={"accept": "application/json"})
+            resp = await client.post(
+                url,
+                json=body,
+                headers={
+                    "accept": "application/json",
+                    "content-type": "application/json",
+                },
+            )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Failed to reach orchestrator: {exc}")
-    if r.status_code != 200:
-        raise HTTPException(status_code=r.status_code, detail=r.text)
+    # Accept 200, 201 or 204 as success codes
+    if resp.status_code not in {200, 201, 204}:
+        raise HTTPException(status_code=resp.status_code, detail=resp.text)
+    # If the orchestrator returns a JSON body, forward it.  Otherwise
+    # return an empty dict.  Use try/except to guard against JSON
+    # parsing errors.
     try:
-        return r.json()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to parse JSON from orchestrator: {exc}")
+        if resp.content:
+            return resp.json()
+    except Exception:
+        # treat non-JSON as success with no body
+        pass
+    return {}
