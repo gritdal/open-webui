@@ -172,7 +172,7 @@
       <span class="ml-2">Block on fallback boolean results</span>
     </label>
     <div class="text-xs opacity-70 mt-1">
-      When enabled, a simple ``False`` allow flag from the policy
+      When enabled, a simple 'False' allow flag from the policy
       enforcer will block the request if no structured decision action
       is provided.  Disable to always allow in this case.
     </div>

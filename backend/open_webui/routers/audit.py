@@ -70,30 +70,106 @@ async def decision_logs():
     items = data if isinstance(data, list) else [data]
     # Drop null/empty events
     events = [x for x in items if isinstance(x, dict) and x]
-    # Fetch the current orchestrator configuration to compute the final
-    # allow/block result.  If the orchestrator cannot be reached or
-    # parsing fails, fall back to default values (block on "block"
-    # actions and honour the boolean allow flag).
-    decision_block_level = "block"
-    allow_fallback_block = True
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+    # Determine the blocking configuration for each decision based on the
+    # orchestrator's configuration history.  Older decisions should be
+    # interpreted using the configuration that was in effect at the
+    # time they were made.  Retrieve both the current configuration
+    # and the configuration history from the orchestrator.  Defaults
+    # to blocking on explicit "block" actions and respecting fallback
+    # boolean blocking when history cannot be determined.
+    default_block_level = "block"
+    default_allow_fallback_block = True
+    config_history: List[Dict[str, Any]] = []
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        # Fetch current configuration
+        try:
             cfg_resp = await client.get(
                 f"{ORCHESTRATOR}/config", headers={"accept": "application/json"}
             )
-        if cfg_resp.status_code == 200:
-            cfg = cfg_resp.json()
-            if isinstance(cfg.get("decision_block_level"), str):
-                level = cfg["decision_block_level"].lower()
-                if level in {"none", "warn", "block"}:
-                    decision_block_level = level
-            if isinstance(cfg.get("allow_fallback_block"), bool):
-                allow_fallback_block = cfg["allow_fallback_block"]
-    except Exception:
-        # ignore errors and use defaults
-        pass
+            if cfg_resp.status_code == 200:
+                cfg = cfg_resp.json()
+                lvl_raw = cfg.get("decision_block_level")
+                fb_raw = cfg.get("allow_fallback_block")
+                if isinstance(lvl_raw, str):
+                    lvl = lvl_raw.lower()
+                    if lvl in {"none", "warn", "block"}:
+                        default_block_level = lvl
+                if isinstance(fb_raw, bool):
+                    default_allow_fallback_block = fb_raw
+        except Exception:
+            pass
+        # Fetch configuration history
+        try:
+            hist_resp = await client.get(
+                f"{ORCHESTRATOR}/config/history", headers={"accept": "application/json"}
+            )
+            if hist_resp.status_code == 200:
+                try:
+                    history_json = hist_resp.json()
+                    if isinstance(history_json, list):
+                        for entry in history_json:
+                            if not isinstance(entry, dict):
+                                continue
+                            ts = entry.get("timestamp")
+                            lvl = entry.get("decision_block_level")
+                            fb = entry.get("allow_fallback_block")
+                            if (
+                                isinstance(ts, str)
+                                and isinstance(lvl, str)
+                                and isinstance(fb, bool)
+                            ):
+                                config_history.append(
+                                    {
+                                        "timestamp": ts,
+                                        "decision_block_level": lvl.lower(),
+                                        "allow_fallback_block": fb,
+                                    }
+                                )
+                        # Sort history by timestamp ascending for lookup
+                        try:
+                            config_history.sort(
+                                key=lambda x: x["timestamp"]
+                            )
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
     mapped: List[Dict[str, Any]] = []
     for ev in events:
+        # Determine which configuration was in effect when this
+        # decision occurred.  Use the event's timestamp to select the
+        # most recent entry from the configuration history that
+        # precedes it.  Fall back to the current configuration when
+        # no history is available.
+        cfg_block_level = default_block_level
+        cfg_fallback_block = default_allow_fallback_block
+        try:
+            ts_str = ev.get("timestamp")
+            if isinstance(ts_str, str) and ts_str:
+                import datetime as _dt
+                # Normalize ISO timestamp: replace trailing Z with UTC offset
+                if ts_str.endswith("Z"):
+                    dt_event = _dt.datetime.fromisoformat(ts_str[:-1] + "+00:00")
+                else:
+                    dt_event = _dt.datetime.fromisoformat(ts_str)
+                for entry in config_history:
+                    try:
+                        ts_h = entry["timestamp"]
+                        if ts_h.endswith("Z"):
+                            dt_hist = _dt.datetime.fromisoformat(ts_h[:-1] + "+00:00")
+                        else:
+                            dt_hist = _dt.datetime.fromisoformat(ts_h)
+                        if dt_hist <= dt_event:
+                            cfg_block_level = entry["decision_block_level"]
+                            cfg_fallback_block = entry["allow_fallback_block"]
+                        else:
+                            break
+                    except Exception:
+                        continue
+        except Exception:
+            pass
         # Determine the decision details.  The policy enforcer stores
         # structured decisions under the "decision" key for local logs.  OPA
         # events record the evaluation result under "result".  Fall back
@@ -128,35 +204,45 @@ async def decision_logs():
             act = decision_obj.get("action")
             if isinstance(act, str):
                 decision_action = act
-        # Compute final allow based on orchestrator configuration
+        # Compute final allow based on the configuration in effect
+        # (cfg_block_level and cfg_fallback_block) rather than the current
+        # configuration.  When a decision action is present, compare
+        # it against the block level.  Otherwise fall back to the
+        # boolean allow flag and the fallback block setting.
         if decision_action is not None:
             act_l = decision_action.lower()
-            if decision_block_level == "none":
+            if cfg_block_level == "none":
                 final_allow = True
-            elif decision_block_level == "warn":
+            elif cfg_block_level == "warn":
                 final_allow = act_l not in {"warn", "block"}
             else:  # "block"
                 final_allow = act_l != "block"
         else:
-            if allow_fallback_block:
+            if cfg_fallback_block:
                 final_allow = bool(allow_bool)
             else:
                 final_allow = True
         # Determine the result string based on the final outcome and
-        # decision action.  When the action settings are disabled
-        # (decision_block_level == "none"), always report "allow".
-        # Otherwise, report "warn" when the request is allowed and the
-        # original decision action was "warn".  Report "block" when
-        # the request is blocked.  In all other allowed cases, report
-        # "allow".
-        if decision_block_level == "none":
-            # Disabled behaviour: ignore decision_action entirely
+        # decision action.  Use the configuration in effect (cfg_block_level)
+        # rather than the current configuration.  When the block level
+        # is "none" the result is always "allow".  Otherwise return
+        # "block" when the request is blocked, "warn" when allowed but
+        # the action was "warn" and the block level permits it, or
+        # "allow" in all other allowed cases.
+        if cfg_block_level == "none":
             result_str = "allow"
         else:
             if not final_allow:
                 result_str = "block"
             else:
-                if decision_action is not None and decision_action.lower() == "warn":
+                if (
+                    decision_action is not None
+                    and decision_action.lower() == "warn"
+                    and cfg_block_level == "block"
+                ):
+                    # Warn actions under the "block" level are allowed but
+                    # should be flagged as "warn" so that the UI can
+                    # differentiate.
                     result_str = "warn"
                 else:
                     result_str = "allow"
