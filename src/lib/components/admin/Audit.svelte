@@ -93,7 +93,7 @@ import ActionSettings from '$lib/components/admin/Audit/ActionSettings.svelte';
           <path d="M2 13h1V6H2v7zm3 0h1V3H5v10zm3 0h1V8H8v5zm3 0h1V1h-1v12z" />
         </svg>
       </div>
-      <div class="self-center">{$i18n.t('Grafana')}</div>
+      <div class="self-center">{$i18n.t('Audit Panel')}</div>
     </button>
 
     <!-- Action Settings tab button.  This tab exposes configuration

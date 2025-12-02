@@ -36,7 +36,7 @@
 -->
 <div class="w-full h-full flex flex-col space-y-2">
   <div class="flex items-center justify-between">
-    <div class="font-medium">Grafana Dashboard</div>
+    <div class="font-medium">Audit Panel</div>
     <!-- Open in a new tab to view the full Grafana UI.  Use a relative
          path so that the link resolves correctly when served behind
          the reverse proxy.  The ``/grafana/dashboards`` route renders
