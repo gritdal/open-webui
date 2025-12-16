@@ -17,7 +17,7 @@
   // application.  Using a relative URL here ensures the dashboard
   // works across environments without hard‑coding ``localhost``.
   const dashboardUrl: string =
-    '/grafana/d/policy-enforcer-dashboard/policy-enforcer-decision-logs?orgId=1&refresh=5s';
+    '/grafana/d/policy-enforcer-dashboard/policy-enforcer-decision-logs?orgId=1&refresh=1s';
 
   // Track whether the iframe has been loaded.  We could use this to
   // display a loading indicator if desired.
