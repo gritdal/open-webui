@@ -5,7 +5,7 @@
    * Action Settings component
    *
    * This component renders a simple form that allows administrators to
-   * configure how the PromptSage orchestrator interprets policy
+   * configure how the AISA orchestrator interprets policy
    * decisions.  The form exposes two settings:
    *
    * 1. decisionBlockLevel – determines when the orchestrator should

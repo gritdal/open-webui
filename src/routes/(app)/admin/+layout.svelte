@@ -98,7 +98,7 @@
 							class="min-w-fit p-1.5 {$page.url.pathname.includes('/admin/audit')
 								? ''
 								: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition"
-							href="/admin/audit">{$i18n.t('PromptSage')}</a
+							href="/admin/audit">{$i18n.t('AISA')}</a
 						>
 					</div>
 				</div>
