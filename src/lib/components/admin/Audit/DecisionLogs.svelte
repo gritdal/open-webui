@@ -81,8 +81,9 @@
   }
 
   function toggleAutoRefresh() {
-    autoRefresh = !autoRefresh;
+    // autoRefresh = !autoRefresh;
     if (autoRefresh) {
+      if (intervalId) clearInterval(intervalId);
       intervalId = setInterval(fetchLogs, 5000);
     } else if (intervalId) {
       clearInterval(intervalId);
@@ -92,7 +93,8 @@
 
   onMount(() => {
     fetchLogs();
-    intervalId = setInterval(fetchLogs, 5000);
+    //intervalId = setInterval(fetchLogs, 5000);
+    if (autoRefresh) intervalId = setInterval(fetchLogs, 5000);
     return () => intervalId && clearInterval(intervalId);
   });
 
