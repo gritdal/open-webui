@@ -79,8 +79,19 @@ else
     ARGS=(--workers "$UVICORN_WORKERS")
 fi
 
-SERVER_CERT_FILE="${SERVER_CERT_FILE:-/etc/ssl/certs/corp-certificate.crt}"
-SERVER_KEY_FILE="${SERVER_KEY_FILE:-/etc/ssl/certs/corp-private.key}"
+
+# Local host commands for getting cert/key for server TLS
+# sudo mkdir -p /etc/openwebui/tls
+# sudo openssl req -x509 -newkey rsa:2048 -sha256 -days 365 -nodes \
+#   -keyout /etc/openwebui/tls/server.key \
+#   -out /etc/openwebui/tls/server.crt \
+#   -subj "/CN=localhost" \
+#   -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+
+# sudo chmod 600 /etc/openwebui/tls/server.key
+
+SERVER_CERT_FILE="${SERVER_CERT_FILE:-/etc/tls/server.crt}"
+SERVER_KEY_FILE="${SERVER_KEY_FILE:-/etc/tls/server.key}"
 
 # Run uvicorn
 WEBUI_SECRET_KEY="$WEBUI_SECRET_KEY" exec "$PYTHON_CMD" -m uvicorn open_webui.main:app \
