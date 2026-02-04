@@ -290,8 +290,8 @@ async def list_policies() -> List[Dict[str, Any]]:
     """
     Return a list of department rego policies for display in the audit UI.
 
-    The MAD parser stores per‑department policies in Valkey under keys
-    formatted as ``rego_policy:<department>``.  Group‑level assignments
+    The MAD parser stores per-department policies in Valkey under keys
+    formatted as ``rego_policy:<department>``.  Group-level assignments
     also use the same prefix but include GUIDs in place of a
     department name.  To build the policies tab we enumerate all
     ``rego_policy:*`` keys, filter out values that appear to be

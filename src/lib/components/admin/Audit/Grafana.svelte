@@ -15,7 +15,7 @@
   // served through the reverse proxy, Grafana is available under the
   // ``/grafana`` subpath on the same host and port as the Open WebUI
   // application.  Using a relative URL here ensures the dashboard
-  // works across environments without hard‑coding ``localhost``.
+  // works across environments without hard-coding ``localhost``.
   const dashboardUrl: string =
     '/grafana/d/policy-enforcer-dashboard/policy-enforcer-decision-logs?orgId=1&refresh=1s';
 
@@ -23,7 +23,7 @@
   // display a loading indicator if desired.
   let loaded = false;
   onMount(() => {
-    // No special on‑mount logic required, but toggling a flag here
+    // No special on-mount logic required, but toggling a flag here
     // allows for future enhancements like a skeleton loader.
     loaded = true;
   });
@@ -50,7 +50,7 @@
     >
   </div>
   <!-- Embed the Grafana dashboard.  The sandbox attribute allows
-       scripts and forms within the iframe, and same‑origin is permitted
+       scripts and forms within the iframe, and same-origin is permitted
        so that Grafana can function correctly. -->
   <iframe
     src={dashboardUrl}

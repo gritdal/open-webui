@@ -13,7 +13,7 @@
   const API_URL = '/api/v1/audit/policies';
 
   /**
-   * Convert a slug or identifier into a human‑readable title.  For
+   * Convert a slug or identifier into a human-readable title.  For
    * example, "human_resources" becomes "Human Resources".  This
    * helper replaces underscores with spaces and capitalises the
    * first letter of each word.
@@ -86,7 +86,7 @@
         <summary class="cursor-pointer text-sm font-medium">
           {prettyName(p.name)} Policy
         </summary>
-        <!-- Display the policy text.  Use whitespace pre‑wrap to preserve
+        <!-- Display the policy text.  Use whitespace pre-wrap to preserve
              formatting and break long lines if necessary. -->
         <pre class="mt-2 whitespace-pre-wrap break-words text-xs overflow-auto">
 {p.policy}

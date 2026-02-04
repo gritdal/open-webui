@@ -95,7 +95,7 @@ export function listDragHandlePlugin(options = {}) {
 		const wantedListType = schema.nodes[targetListNode.type.name];
 		if (!wantedListType) return itemNode;
 
-		// Deep‑normalize children recursively
+		// Deep-normalize children recursively
 		const normalizeNode = (node, parentTargetListNode) => {
 			console.log(
 				'Normalizing node',
