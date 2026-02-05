@@ -243,6 +243,14 @@
 								}}
 							>
 								<div class="mb-1">
+									<div class="mb-4 flex justify-center">
+										<img
+											crossorigin="anonymous"
+											src="{WEBUI_BASE_URL}/static/AISA_logo_v1_noborder.png"
+											class="w-full max-w-xs h-auto object-contain"
+											alt="AISA"
+										/>
+									</div>
 									<div class=" text-2xl font-medium">
 										{#if $config?.onboarding ?? false}
 											{$i18n.t(`Get started with {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}

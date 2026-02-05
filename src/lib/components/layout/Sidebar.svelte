@@ -62,6 +62,7 @@
 	import PinnedModelList from './Sidebar/PinnedModelList.svelte';
 	import Note from '../icons/Note.svelte';
 	import { slide } from 'svelte/transition';
+	import AISABrand from './Sidebar/AISABrand.svelte';
 
 	const BREAKPOINT = 768;
 
@@ -679,6 +680,13 @@
 			<div>
 				<div class=" py-0.5">
 					{#if $user !== undefined && $user !== null}
+						<AISABrand
+							href="https://gritdynamics.co"
+							label="AISA"
+							logoSrc="{WEBUI_BASE_URL}/static/AISA_logo_v1_noborder.png"
+							collapsed={false}
+						/>
+
 						<UserMenu
 							role={$user?.role}
 							on:show={(e) => {
@@ -1205,6 +1213,13 @@
 				></div>
 				<div class="flex flex-col font-primary">
 					{#if $user !== undefined && $user !== null}
+						<AISABrand
+							href="https://gritdynamics.co"
+							label="AISA"
+							logoSrc="{WEBUI_BASE_URL}/static/AISA_logo_v1_noborder.png"
+							collapsed={false}
+						/>
+						
 						<UserMenu
 							role={$user?.role}
 							on:show={(e) => {

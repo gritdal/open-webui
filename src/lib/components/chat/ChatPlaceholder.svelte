@@ -80,6 +80,17 @@
 			</Tooltip>
 		{/if}
 
+
+		<div class="mt-3 mb-2 flex justify-start" in:fade={{ duration: 200 }}>
+			<img
+				crossorigin="anonymous"
+				src={WEBUI_BASE_URL + '/static/AISA_logo_v1_noborder.png'}
+				class="w-full max-w-xs h-auto object-contain"
+				alt="AISA"
+				draggable="false"
+			/>
+		</div>
+
 		<div
 			class=" mt-2 mb-4 text-3xl text-gray-800 dark:text-gray-100 text-left flex items-center gap-4 font-primary"
 		>

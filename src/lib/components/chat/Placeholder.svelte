@@ -101,6 +101,16 @@
 					}}
 				/>
 			{:else}
+				<div class="mb-3 flex w-full justify-center" in:fade={{ duration: 100 }}>
+					<img
+						crossorigin="anonymous"
+						src={WEBUI_BASE_URL + '/static/AISA_logo_v1_noborder.png'}
+						class="w-full max-w-sm h-auto object-contain"
+						alt="AISA"
+						draggable="false"
+					/>
+				</div>
+
 				<div class="flex flex-row justify-center gap-3 @sm:gap-3.5 w-fit px-5 max-w-xl">
 					<div class="flex shrink-0 justify-center">
 						<div class="flex -space-x-4 mb-0.5" in:fade={{ duration: 100 }}>
